@@ -54,7 +54,7 @@ The substantive cross-platform conclusions are unchanged or strengthened:
   stronger: Politics mean slope over reliable bins = 1.45 (was 1.31).
 - **Whale (scale) effect remains Kalshi-specific under proper clustering.**
   Polymarket Politics Delta = +0.281 [0.026, 0.542] under the cell-level
-  bootstrap (significant) but +0.207 [-0.315, 1.100] under the
+  bootstrap (significant) but +0.210 [-0.311, 1.122] under the
   market-clustered bootstrap (NOT significant). Kalshi Politics is significant
   under cell, market- AND event-clustered bootstraps. So the requested
   clustering reinforces the platform-specific reading.

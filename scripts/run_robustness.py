@@ -156,7 +156,7 @@ def fix5_price_range():
     tb = time_bin_sql()
     sb = size_bin_sql()
 
-    def load_and_fit(price_lo, price_hi):
+    def load_and_fit(price_lo, price_hi, C=10.0):
         conn = duckdb.connect()
         raw = conn.execute(f"""
             WITH resolved AS (
@@ -195,10 +195,11 @@ def fix5_price_range():
             n_t = int(cell["n_trades"].sum())
             if n_t < CELL_MIN:
                 continue
-            result = fit_slope_with_se(
+            result = fit_logistic(
                 cell["yes_price"].values.astype(float),
                 cell["is_yes"].values.astype(float),
                 cell["total_contracts"].values.astype(float),
+                C=C,
             )
             if result is None:
                 continue
@@ -210,33 +211,36 @@ def fix5_price_range():
             ))
         return pd.DataFrame(rows)
 
-    configs = [(5, 95, "Baseline [5,95]"), (2, 98, "Extended [2,98]"), (1, 99, "Full [1,99]")]
-    decomp_rows = []
-    for lo, hi, label in configs:
-        print(f"\n  Computing {label}...")
-        cal = load_and_fit(lo, hi)
+    def block_r2(cal):
+        """Four-block grouping (size block = kappa+gamma) of the five-term fit."""
         cal = decompose(cal.copy())
         theta = cal["slope_b"].values
         ss_total = np.sum((theta - theta.mean()) ** 2)
-        # Five-term fit; report a four-block grouping (size block = kappa+gamma)
-        # for comparability with Table B.6, which intentionally groups the
-        # common and domain-specific size effects.
-        fitted_cumul = np.zeros(len(theta))
-        prev = 0.0
-        marg = {}
+        fitted_cumul = np.zeros(len(theta)); prev = 0.0; marg = {}
         for comp in ["mu", "alpha", "kappa", "beta", "gamma"]:
             fitted_cumul = fitted_cumul + cal[comp].values
             c_r2 = np.sum((fitted_cumul - theta.mean()) ** 2) / ss_total if ss_total > 0 else 0
             marg[comp] = c_r2 - prev
             prev = c_r2
-        blocks = {"mu": marg["mu"], "alpha": marg["alpha"], "beta": marg["beta"],
-                  "gamma": marg["kappa"] + marg["gamma"]}
+        return {"mu": marg["mu"], "alpha": marg["alpha"], "beta": marg["beta"],
+                "gamma": marg["kappa"] + marg["gamma"]}, prev, len(cal)
+
+    # Price-range robustness (C=10) and L2-regularization sweep (C=1,10,100 at [5,95]).
+    price_configs = [(5, 95, 10.0, "Baseline [5,95], C=10"), (2, 98, 10.0, "Price [2,98]"),
+                     (1, 99, 10.0, "Price [1,99]"), (10, 90, 10.0, "Price [10,90]")]
+    c_configs = [(5, 95, 1.0, "C=1"), (5, 95, 100.0, "C=100")]
+    decomp_rows = []
+    for lo, hi, C, label in price_configs + c_configs:
+        print(f"\n  Computing {label}...")
+        blocks, total, ncell = block_r2(load_and_fit(lo, hi, C=C))
         cum = 0.0
         for comp in ["mu", "alpha", "beta", "gamma"]:
             cum += blocks[comp]
             decomp_rows.append(dict(check_name=label, component=comp,
                                     marginal_r2=round(blocks[comp], 4), cumulative_r2=round(cum, 4)))
-        print(f"    {len(cal)} cells, total R²={prev:.4f}")
+        decomp_rows.append(dict(check_name=label, component="total",
+                                marginal_r2=round(total, 4), cumulative_r2=round(total, 4)))
+        print(f"    {ncell} cells, total R²={total:.4f}")
 
     pd.DataFrame(decomp_rows).to_csv(OUT / "price_range_robustness.csv", index=False)
     print("  saved price_range_robustness.csv")

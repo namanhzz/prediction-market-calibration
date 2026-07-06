@@ -899,6 +899,82 @@ def write_balanced_availability() -> None:
     print(summ.to_string(index=False))
 
 
+def write_balanced_4bin_panel() -> None:
+    """Exactly-balanced availability panel (Reviewer 1: contracts available for
+    ALL time intervals). Requiring trades in all nine fine bins is infeasible, so
+    the horizon is coarsened to four bins (<24h, 1d-1w, 1w-1mo, >1mo) and the
+    panel is restricted to contracts traded in ALL FOUR bins; domain-by-coarse-bin
+    slopes are then re-estimated on this fully balanced subset.
+    """
+    import duckdb
+
+    markets = str(KALSHI_MARKETS).replace("\\", "/")
+    trades = str(KALSHI_TRADES).replace("\\", "/")
+    coarse = "CASE WHEN h < 24 THEN 0 WHEN h < 168 THEN 1 WHEN h < 720 THEN 2 ELSE 3 END"
+    CB = {0: "<24h", 1: "1d-1w", 2: "1w-1mo", 3: ">1mo"}
+
+    conn = duckdb.connect()
+    try:
+        raw = conn.execute(
+            f"""
+            WITH resolved AS (
+                SELECT ticker, event_ticker, result, close_time FROM '{markets}/*.parquet'
+                WHERE status='finalized' AND result IN ('yes','no')
+            ),
+            td AS (
+                SELECT t.yes_price, t.count AS c,
+                       CASE WHEN m.result='yes' THEN 1 ELSE 0 END AS is_yes,
+                       m.ticker, regexp_extract(m.event_ticker,'^([A-Z0-9]+)',1) AS cat,
+                       EXTRACT(EPOCH FROM (m.close_time - t.created_time))/3600.0 AS h
+                FROM '{trades}/*.parquet' t INNER JOIN resolved m ON t.ticker=m.ticker
+                WHERE t.created_time<=TIMESTAMP '{DATE_CUTOFF}' AND m.close_time>t.created_time
+                      AND t.yes_price BETWEEN 5 AND 95
+            ),
+            tagged AS (SELECT *, ({coarse}) AS cb FROM td),
+            mc AS (SELECT ticker FROM tagged GROUP BY ticker HAVING COUNT(*)>=10),
+            bal AS (SELECT ticker FROM tagged t JOIN mc USING(ticker)
+                    GROUP BY ticker HAVING COUNT(DISTINCT cb)=4)
+            SELECT t.cat, t.cb, t.yes_price, t.is_yes, SUM(t.c) AS w, COUNT(*) AS n
+            FROM tagged t JOIN bal USING(ticker)
+            GROUP BY t.cat, t.cb, t.yes_price, t.is_yes
+            """
+        ).df()
+        n_contracts = conn.execute(
+            f"""
+            WITH resolved AS (SELECT ticker,event_ticker,result,close_time FROM '{markets}/*.parquet'
+                              WHERE status='finalized' AND result IN ('yes','no')),
+            td AS (SELECT t.count,m.ticker,EXTRACT(EPOCH FROM (m.close_time-t.created_time))/3600.0 AS h
+                   FROM '{trades}/*.parquet' t JOIN resolved m ON t.ticker=m.ticker
+                   WHERE t.created_time<=TIMESTAMP '{DATE_CUTOFF}' AND m.close_time>t.created_time
+                         AND t.yes_price BETWEEN 5 AND 95),
+            tagged AS (SELECT ticker,({coarse}) AS cb FROM td),
+            mc AS (SELECT ticker FROM tagged GROUP BY ticker HAVING COUNT(*)>=10)
+            SELECT COUNT(*) FROM (SELECT ticker FROM tagged t JOIN mc USING(ticker)
+                                  GROUP BY ticker HAVING COUNT(DISTINCT cb)=4)
+            """
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    raw["domain"] = raw["cat"].apply(get_group)
+    raw = raw[raw["domain"].isin(DOMAINS)].copy()
+    rows = []
+    for (d, cb), g in raw.groupby(["domain", "cb"]):
+        if int(g["n"].sum()) < CELL_MIN:
+            continue
+        res = fit_logistic(g["yes_price"].to_numpy(float), g["is_yes"].to_numpy(float),
+                           g["w"].to_numpy(float))
+        if res:
+            rows.append(dict(domain=d, coarse_bin=CB[int(cb)], coarse_bin_order=int(cb),
+                             slope_b=round(res[0], 3), n_trades=int(g["n"].sum())))
+    out = pd.DataFrame(rows)
+    out.attrs["n_contracts"] = n_contracts
+    out.to_csv(OUT / "availability_balanced_4bin.csv", index=False)
+    print(f"  availability_balanced_4bin.csv: {n_contracts} contracts traded in all 4 coarse bins")
+    print(out.pivot_table(index="domain", columns="coarse_bin", values="slope_b")
+          .reindex(columns=["<24h", "1d-1w", "1w-1mo", ">1mo"]).to_string())
+
+
 def main() -> None:
     cal = pd.read_csv(KALSHI_OUT / "calibration_matrix_decomposed.csv")
     write_intercept_and_sample_summaries(cal)
@@ -910,6 +986,7 @@ def main() -> None:
     write_burst_aggregation_robustness()
     write_fee_and_size_diagnostics()
     write_availability_restricted_slopes()
+    write_balanced_4bin_panel()
     write_balanced_availability()
     print(f"Revision diagnostics written to {OUT}")
 
