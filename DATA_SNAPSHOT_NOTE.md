@@ -21,18 +21,34 @@ original submitted snapshot, and discloses the snapshot checksums in the Data
 Availability statement. This guarantees 100% reproducibility from the deposited
 snapshot.
 
-## Material consequences of regeneration (vs the originally submitted numbers)
+## Why the snapshot changed (technical provenance)
 
-The current snapshot differs from the one underlying the original submission. The
-**three analyzed domains are essentially unchanged** (e.g. Politics: 45.7M resolved
-trades and 24.6B contracts in both; Sports 49.1M; Crypto ~125M), but the current
-snapshot carries a **larger long-tail of bespoke "Other" markets**, so full-dataset
-Polymarket totals are larger (288.7M resolved trades / 218k resolved contracts now,
-vs 227.6M / 116k originally). After the 5--95c price filter and the four-domain
-cross-platform restriction, 135.6M trades enter the calibration analysis (this is a
-filtered subset, not directly comparable to the original 3-domain total). Regenerating
-changes several Polymarket numbers, but the substantive cross-platform conclusions are
-unchanged or strengthened:
+The revised snapshot was regenerated from the public Polymarket source using the
+released ingestion pipeline (`scripts/create_unified_polymarket.py`). It contains more
+resolved markets than the snapshot underlying the original submission — chiefly a
+larger tail of bespoke "Other" markets, plus additional Politics/Crypto markets that
+resolved between the two data pulls. We could **not** attribute the difference to a
+specific pipeline bug or a changed filter; it is consistent with a fuller/later pull of
+the same source rather than a correction of an error. The three analyzed domains
+(Sports, Crypto, Politics) are stable in trade and contract counts; the visible changes
+are in full-dataset totals and, to a lesser degree, in the Polymarket political slope
+and scale gap.
+
+### Reconciliation (original submission vs revised snapshot)
+
+| Quantity | Original submission | Revised snapshot |
+| --- | --- | --- |
+| Full-dataset PM resolved trades | 227.6M | 288.7M |
+| Full-dataset PM resolved contracts | 116k | 218k |
+| PM markets (3 comparable domains) | 113,483 | 124,881 |
+| PM trades (3 comparable domains) | 220.1M | 219.4M |
+| Politics markets | 14,225 | 14,389 |
+| Politics trades / contracts | 45.7M / 24.6B | 45.7M / 24.6B |
+| Politics mean slope (reliable bins) | 1.31 | 1.45 |
+| Politics scale gap Δ (cell bootstrap) | +0.11 [-0.15, 0.39] | +0.28 [0.03, 0.54] |
+| Politics scale gap Δ (market-clustered) | not reported | +0.21 [-0.31, 1.12] (n.s.) |
+
+The substantive cross-platform conclusions are unchanged or strengthened:
 
 - **Political underconfidence replicates on Polymarket** and is, if anything,
   stronger: Politics mean slope over reliable bins = 1.45 (was 1.31).
