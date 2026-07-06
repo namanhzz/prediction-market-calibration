@@ -1,0 +1,22 @@
+output/
+data/
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+.ruff_cache/
+*.nc
+.venv/
+
+# Paper (not tracked)
+paper/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg

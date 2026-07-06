@@ -1,0 +1,13 @@
+subcategory,n_trades,pct_of_bin,slope,leave_one_out_slope
+Trump Admin,64122,63.0,1.0784,0.8776
+Presidential,14439,14.2,1.0403,0.9439
+Electoral College,7560,7.4,1.8071,0.6886
+Other Politics,5932,5.8,2.1694,0.8909
+Other Elections,3865,3.8,0.1751,1.0089
+Biden Admin,3643,3.6,-0.1359,1.1829
+House,1006,1.0,0.5667,0.9342
+Governor,758,0.7,1.4375,0.9288
+Senate,376,0.4,7.219,0.9307
+NYC Mayor,126,0.1,5.6207,0.9315
+Government,4,0.0,,0.9326
+Cabinet,3,0.0,,0.9326

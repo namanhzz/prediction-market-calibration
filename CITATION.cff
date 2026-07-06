@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Prediction Market Calibration: A Microstructure Analysis"
+type: software
+date-released: "2025-01-01"
+license: MIT
+repository-code: "https://github.com/namanhzz/prediction-market-calibration"
+keywords:
+  - prediction markets
+  - calibration
+  - microstructure
+  - Bayesian hierarchical models
+  - logistic regression

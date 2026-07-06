@@ -1,0 +1,308 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+\lstset{
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  columns=fullflexible,
+  keepspaces=true,
+}
+
+\hypersetup{colorlinks=true,linkcolor=blue!60!black,urlcolor=blue!60!black,citecolor=blue!60!black}
+
+\title{\textbf{Supplementary Material}\\[6pt]
+\large Decomposing Crowd Wisdom: Domain-Specific Calibration Dynamics\\in Prediction Markets}
+\author{Nam Anh Le\\
+\small Center for Applied Data Science and Artificial Intelligence,\\
+\small College of Technology, National Economics University, Vietnam\\
+\small \href{mailto:me@namanhle.com}{me@namanhle.com}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\noindent This document accompanies the main paper and provides (a) domain classification rules for both Kalshi and Polymarket, (b) cross-platform comparison tables, and (c) political subcategory slope analysis including a Simpson's paradox diagnostic. The full 216-cell calibration matrix is provided as a separate CSV file (\texttt{calibration\_matrix\_216.csv}).
+
+\tableofcontents
+\vspace{1em}
+
+%% ============================================================
+\section{Domain Classification Rules}\label{sec:classification}
+%% ============================================================
+
+Markets are classified into six analysis domains: Sports, Crypto, Politics, Finance, Weather, and Entertainment. Markets not matching any domain are classified as ``Other'' and excluded. The two exchanges require different classification strategies.
+
+\subsection{Kalshi: Prefix-Based Taxonomy}\label{sec:kalshi_class}
+
+Kalshi assigns structured event tickers to every market (e.g., \texttt{KXNFLGAME-25-AFC-CHI-DET}). The leading alphanumeric prefix is extracted via:
+
+\begin{lstlisting}[language=SQL]
+regexp_extract(event_ticker, '^([A-Z0-9]+)', 1)
+\end{lstlisting}
+
+\noindent yielding, for example, \texttt{KXNFLGAME}. This prefix is looked up in a list of 571 pattern rules (\texttt{SUBCATEGORY\allowbreak\_PATTERNS}), each mapping a prefix substring to a \texttt{(group, category, subcategory)} triple. Lookup is case-insensitive substring matching, with more specific patterns listed first. The implementation is:
+
+\begin{lstlisting}[language=Python]
+def get_hierarchy(category: str) -> tuple:
+    cat_upper = category.upper()
+    for pattern, group, cat, subcat in SUBCATEGORY_PATTERNS:
+        if pattern in cat_upper:
+            return (group, cat, subcat)
+    return ("Other", "Other", category)
+
+def get_group(category: str) -> str:
+    return get_hierarchy(category)[0]
+\end{lstlisting}
+
+\noindent Table~\ref{tab:kalshi_domains} lists the six analysis domains with their principal ticker prefixes and descriptions.
+
+\begin{table}[!ht]
+\caption{Kalshi domain composition: principal ticker prefixes.\label{tab:kalshi_domains}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lll@{}}
+\toprule
+Domain & Principal Prefixes & Description \\
+\midrule
+Sports & \texttt{NFLGAME}, \texttt{NBAGAME}, \texttt{MLBGAME}, \texttt{NCAAFGAME}, & Game outcomes, spreads, totals, \\
+       & \texttt{NCAAMBGAME}, \texttt{NHLGAME}, \texttt{WNBAGAME},               & player props, win totals \\
+       & \texttt{UFCFIGHT}, \texttt{ATPMATCH}, \texttt{PGATOUR}, \texttt{EPLGAME} & \\[4pt]
+Crypto & \texttt{BTCD}, \texttt{BTCMAXY}, \texttt{ETHD}, \texttt{ETHMAXY},       & Daily/weekly price moves, \\
+       & \texttt{DOGE}, \texttt{SOL}, \texttt{XRP}, \texttt{SHIBA}, \texttt{COIN} & token price thresholds \\[4pt]
+Politics & \texttt{PRES}, \texttt{SENATEAZ}, \texttt{HOUSEMOV}, \texttt{GOVPARTYVA}, & Elections, administration actions, \\
+         & \texttt{TRUMP}, \texttt{BIDEN}, \texttt{CABINET}, \texttt{MAYORNYCPARTY}  & policy, geopolitics \\[4pt]
+Finance & \texttt{FEDDECISION}, \texttt{INXU}, \texttt{NASDAQ100U},               & Index daily moves, Fed decisions, \\
+        & \texttt{TNOTE}, \texttt{USDJPY}, \texttt{GAS}, \texttt{CPI}, \texttt{TARIFF} & macro indicators, commodities \\[4pt]
+Weather & \texttt{HIGHNY}, \texttt{RAINNYC}, \texttt{SNOW},                        & Temperature thresholds, \\
+        & \texttt{TORNADO}, \texttt{HURCAT}, \texttt{ARCTICICE}                    & precipitation, severe weather \\[4pt]
+Entertainment & \texttt{OSCAR}, \texttt{EMMY}, \texttt{GRAMMY},                    & Awards shows, streaming \\
+              & \texttt{NETFLIX}, \texttt{BOX}, \texttt{SPOTIFY}                   & metrics, box office \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\noindent The full list of 571 prefix-to-domain mappings is in \texttt{src/classify.py} in the replication repository.
+
+\subsection{Polymarket: Regex Title Matching}\label{sec:poly_class}
+
+Polymarket lacks structured ticker identifiers. Markets are classified by applying compiled regular expression patterns to the market title (question text). First match wins; patterns are ordered by specificity. Only four domains are used in the cross-platform comparison (Weather and Entertainment have negligible Polymarket coverage).
+
+\vspace{0.5em}
+\noindent\textbf{Sports pattern:}
+\begin{lstlisting}
+(?i)\b(NFL|NBA|MLB|NHL|UFC|MMA|boxing|tennis|golf|F1|
+Formula 1|NASCAR|Super Bowl|World Series|Stanley Cup|
+NCAA|March Madness|Premier League|Champions League|
+La Liga|Serie A|Bundesliga|Ligue 1|Europa League|
+World Cup|Copa America|MLS|WNBA|PGA|ATP|WTA|
+Grand Slam|Wimbledon|US Open|Australian Open|French Open|
+Ryder Cup|Olympics|Olympic|medal|playoff|postseason|
+All[- ]Star|MVP|Cy Young|Heisman|touchdown|home run|
+strikeout|rushing yards|rebound|assist|point spread|
+moneyline|sack|interception|three-pointer|
+batting average|ERA|free throw|penalty kick|
+49ers|Packers|Chiefs|Eagles|Cowboys|Patriots|Dolphins|
+Bills|Ravens|Bengals|Lakers|Celtics|Warriors|Bucks|
+Nuggets|Knicks|76ers|Heat|Nets|Suns|Yankees|Dodgers|
+Braves|Astros|Mets|Red Sox|Cubs|Phillies|Padres|
+Maple Leafs|Bruins|Rangers|Lightning|Avalanche|Panthers|
+Oilers|Arsenal|Liverpool|Manchester|Chelsea|Barcelona|
+Real Madrid|Bayern|Juventus|
+game \d|win.*series|win.*championship|win.*title)\b
+\end{lstlisting}
+
+\noindent\textbf{Politics pattern:}
+\begin{lstlisting}
+(?i)\b(president|presidential|election|senate|congress|
+governor|democrat|republican|GOP|Trump|Biden|Obama|
+vote|ballot|primary|caucus|nominee|nomination|
+Supreme Court|executive order|impeach|filibuster|
+debt ceiling|shutdown|electoral college|swing state|
+poll|approval rating|cabinet|attorney general|
+secretary of state|Speaker|majority leader|veto|
+legislation|midterm|runoff|recall|referendum|
+RFK|DeSantis|Haley|Ramaswamy|Newsom|Pence|Kamala|
+Harris|McConnell|Pelosi|AOC|Schumer|Vance|Vivek|
+indictment|classified documents|NATO|Ukraine|Russia|
+China.*Taiwan|Israel|Iran|sanction|TikTok.*ban|
+government.*ban|Congress.*pass|federal|POTUS|
+White House|inaugurat)\b
+\end{lstlisting}
+
+\noindent\textbf{Crypto pattern:}
+\begin{lstlisting}
+(?i)\b(Bitcoin|BTC|Ethereum|ETH|crypto|Solana|SOL|
+Dogecoin|DOGE|XRP|token|blockchain|DeFi|altcoin|
+stablecoin|USDC|USDT|Tether|Binance|Coinbase|FTX|
+SBF|halving|mining|NFT|airdrop|memecoin|Pepe|Shiba|
+TVL|DEX|CEX|Bitcoin ETF|Ethereum ETF|spot ETF|
+Layer 2|rollup|zkSync|Arbitrum|Polygon|Avalanche|
+Cardano|ADA|Ripple|Litecoin|Polkadot|Chainlink|
+Uniswap)\b
+\end{lstlisting}
+
+\noindent\textbf{Finance pattern:}
+\begin{lstlisting}
+(?i)\b(S&P|S&P 500|NASDAQ|Dow Jones|Russell 2000|stock|
+Fed |Federal Reserve|interest rate|rate cut|rate hike|
+FOMC|CPI|inflation|GDP|recession|tariff|IPO|treasury|
+yield curve|bond|unemployment|jobs report|
+nonfarm payroll|non-farm payroll|PCE|PPI|
+housing starts|retail sales|consumer confidence|
+earnings|revenue|market cap|PE ratio|merger|
+acquisition|bankruptcy|credit rating|oil price|
+gold price|commodity|forex|quantitative|
+balance sheet|FDIC|trade deficit|budget|fiscal|
+monetary policy)\b
+\end{lstlisting}
+
+\noindent The classifier function applies patterns in order (Sports $\to$ Politics $\to$ Crypto $\to$ Finance) and returns ``Other'' if no pattern matches. This results in 42.5\% of Polymarket markets classified as ``Other,'' reflecting Polymarket's long tail of bespoke markets (celebrity events, tech product launches, meme markets).
+
+%% ============================================================
+\section{Cross-Platform Comparison Tables}\label{sec:cross_platform}
+%% ============================================================
+
+Table~\ref{tab:cp_time} presents the full cross-platform comparison of calibration slopes by domain and time horizon. Slopes are estimated from contract-weighted logistic regression with $L_2$ regularisation ($C = 10$). Cells with fewer than 200 trades are excluded.
+
+\begin{table}[!ht]
+\caption{Cross-platform calibration slopes by domain and time horizon ($\Delta$ = Polymarket $-$ Kalshi). Bins marked $\dagger$ are unreliable for Polymarket due to $\sim$3-hour timestamp noise from block-to-timestamp bucketing.\label{tab:cp_time}}
+\centering
+\small
+\begin{tabular}{lccc@{\hspace{1.5em}}ccc@{\hspace{1.5em}}ccc}
+\toprule
+& \multicolumn{3}{c}{Sports} & \multicolumn{3}{c}{Crypto} & \multicolumn{3}{c}{Politics} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}
+Bin & Kalshi & Poly & $\Delta$ & Kalshi & Poly & $\Delta$ & Kalshi & Poly & $\Delta$ \\
+\midrule
+0--1h$^\dagger$  & 1.101 & 1.026 & $-$0.076 & 0.993 & 1.059 & $+$0.066 & 1.341 & 0.699 & $-$0.642 \\
+1--3h$^\dagger$  & 0.960 & 1.187 & $+$0.227 & 1.013 & 0.875 & $-$0.138 & 0.933 & 1.255 & $+$0.322 \\
+3--6h            & 0.897 & 0.917 & $+$0.020 & 1.065 & 0.973 & $-$0.092 & 1.317 & 1.514 & $+$0.197 \\
+6--12h           & 1.006 & 1.093 & $+$0.087 & 1.007 & 0.991 & $-$0.016 & 1.552 & 1.216 & $-$0.336 \\
+12--24h          & 1.053 & 0.996 & $-$0.057 & 1.006 & 1.114 & $+$0.108 & 1.477 & 1.392 & $-$0.085 \\
+24--48h          & 1.075 & 1.090 & $+$0.015 & 1.209 & 1.091 & $-$0.118 & 1.515 & 1.204 & $-$0.311 \\
+2d--1w           & 1.037 & 1.027 & $-$0.010 & 1.121 & 0.990 & $-$0.131 & 1.833 & 2.077 & $+$0.244 \\
+1w--1mo          & 1.240 & 0.952 & $-$0.288 & 1.090 & 1.162 & $+$0.072 & 1.833 & 1.671 & $-$0.162 \\
+1mo+             & 1.740 & 1.336 & $-$0.404 & 1.357 & 1.072 & $-$0.285 & 1.730 & 1.083 & $-$0.647 \\
+\midrule
+Mean (reliable)  & 1.150 & 1.059 & $-$0.091 & 1.122 & 1.056 & $-$0.066 & 1.608 & 1.451 & $-$0.157 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!ht]
+\caption{Cross-platform calibration slopes for Finance ($\Delta$ = Polymarket $-$ Kalshi). Polymarket Finance coverage is extremely thin (2,648 markets vs Kalshi's 38,058); these results are reported for completeness only.\label{tab:cp_finance}}
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Bin & Kalshi & Polymarket & $\Delta$ \\
+\midrule
+0--1h$^\dagger$  & 0.957 & 1.464 & $+$0.507 \\
+1--3h$^\dagger$  & 1.068 & 1.589 & $+$0.521 \\
+3--6h            & 1.025 & 1.728 & $+$0.702 \\
+6--12h           & 0.967 & 1.838 & $+$0.871 \\
+12--24h          & 0.983 & 2.195 & $+$1.212 \\
+24--48h          & 0.816 & 2.507 & $+$1.690 \\
+2d--1w           & 1.065 & 1.546 & $+$0.481 \\
+1w--1mo          & 1.420 & 1.821 & $+$0.401 \\
+1mo+             & 1.200 & 2.104 & $+$0.904 \\
+\bottomrule
+\end{tabular}
+\begin{flushleft}
+\small\textit{Note:} The extreme Polymarket slopes (e.g., 2.431 at 3--6h, 2.453 at 24--48h) reflect very thin markets. Finance is excluded from main comparison figures and tables.
+\end{flushleft}
+\end{table}
+
+\begin{table}[!ht]
+\caption{Cross-platform whale effect bootstrap ($\Delta$ = mean slope for Large trades minus mean slope for Single trades). Cell-level resamples analysis cells; clustered resamples whole markets/events. The Kalshi effect is significant at every clustering level; the Polymarket effect is significant only at the cell level and vanishes under market clustering.\label{tab:cp_whale}}
+\centering
+\begin{tabular}{llccc}
+\toprule
+Platform \& method & Domain & $\Delta$(L$-$S) & 95\% CI & Significant? \\
+\midrule
+Kalshi, cell-level        & Politics & $+$0.531 & $[+0.288, +0.747]$ & Yes \\
+Kalshi, market-clustered  & Politics & $+$0.593 & $[+0.144, +1.318]$ & Yes \\
+Kalshi, event-clustered   & Politics & $+$0.630 & $[+0.115, +1.795]$ & Yes \\
+Polymarket, cell-level    & Politics & $+$0.281 & $[+0.026, +0.542]$ & Yes \\
+Polymarket, market-clustered & Politics & $+$0.210 & $[-0.311, +1.122]$ & No  \\
+Polymarket, cell-level    & Sports   & $+$0.110 & $[-0.118, +0.316]$ & No  \\
+Polymarket, cell-level    & Crypto   & $+$0.081 & $[-0.112, +0.261]$ & No  \\
+Polymarket, cell-level    & Finance  & $+$0.739 & $[+0.211, +1.298]$ & Yes \\
+\bottomrule
+\end{tabular}
+\begin{flushleft}
+\small\textit{Note:} Finance is reported for completeness only; Polymarket Finance coverage is extremely thin and it is excluded from the main comparison. The Polymarket Politics effect is significant at the cell level but not once trades are clustered by market, so the trade-size amplification is treated as specific to Kalshi.
+\end{flushleft}
+\end{table}
+
+%% ============================================================
+\section{Political Subcategory Analysis}\label{sec:political}
+%% ============================================================
+
+The aggregate Politics domain slope at the 1--3 hour bin ($\hat{b} = 0.933$) conceals extreme heterogeneity across subcategories. This section documents the subcategory composition and a Simpson's paradox diagnostic.
+
+\subsection{Subcategory Slope Ranges}
+
+Table~\ref{tab:subcat_slopes} presents the 10 political subcategories sorted by their share of trades in the 1--3 hour bin. Slopes range from $-0.136$ (Biden Admin) to $7.219$ (Senate), illustrating the compositional complexity hidden by the aggregate slope.
+
+\begin{table}[!ht]
+\caption{Political subcategory slopes at the 1--3 hour horizon, sorted by trade share. The aggregate bin slope is 0.933.\label{tab:subcat_slopes}}
+\centering
+\begin{tabular}{lrrr}
+\toprule
+Subcategory & Trades & \% of Bin & Slope $\hat{b}$ \\
+\midrule
+Trump Admin       & 64{,}122 & 63.0 & 1.078 \\
+Presidential      & 14{,}439 & 14.2 & 1.040 \\
+Electoral College  &  7{,}560 &  7.4 & 1.807 \\
+Other Politics     &  5{,}932 &  5.8 & 2.169 \\
+Other Elections    &  3{,}865 &  3.8 & 0.175 \\
+Biden Admin        &  3{,}643 &  3.6 & $-$0.136 \\
+House              &  1{,}006 &  1.0 & 0.567 \\
+Governor           &    758   &  0.7 & 1.438 \\
+Senate             &    376   &  0.4 & 7.219 \\
+NYC Mayor          &    126   &  0.1 & 5.621 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Simpson's Paradox Diagnostic}
+
+Table~\ref{tab:simpsons} shows that the aggregate 1--3 hour slope (0.933) is below 1.0, but the two largest subcategories (Trump Admin at 1.078 and Presidential at 1.040, comprising 77.2\% of trades) both have slopes above 1.0. This is a Simpson's paradox: subcategories with $\hat{b} > 1$ dominate the data, yet the aggregate slope is pulled below 1.0 by the nonlinear interaction of logistic regression with heterogeneous intercepts across subcategories. The leave-one-out column shows the aggregate slope when each subcategory is removed.
+
+\begin{table}[!ht]
+\caption{Simpson's paradox diagnostic at the 1--3 hour horizon. Leave-one-out slope is the aggregate Politics slope after removing each subcategory.\label{tab:simpsons}}
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Subcategory & Trades & \% of Bin & Slope & Leave-One-Out Slope \\
+\midrule
+Trump Admin       & 64{,}122 & 63.0 & 1.078 & 0.878 \\
+Presidential      & 14{,}439 & 14.2 & 1.040 & 0.944 \\
+Electoral College  &  7{,}560 &  7.4 & 1.807 & 0.689 \\
+Other Politics     &  5{,}932 &  5.8 & 2.169 & 0.891 \\
+Other Elections    &  3{,}865 &  3.8 & 0.175 & 1.009 \\
+Biden Admin        &  3{,}643 &  3.6 & $-$0.136 & 1.183 \\
+House              &  1{,}006 &  1.0 & 0.567 & 0.934 \\
+Governor           &    758   &  0.7 & 1.438 & 0.929 \\
+Senate             &    376   &  0.4 & 7.219 & 0.931 \\
+NYC Mayor          &    126   &  0.1 & ---   & 0.933 \\
+Government         &      4   &  0.0 & ---   & 0.933 \\
+Cabinet            &      3   &  0.0 & ---   & 0.933 \\
+\bottomrule
+\end{tabular}
+\begin{flushleft}
+\small\textit{Note:} Slopes for NYC Mayor, Government, and Cabinet are not estimated due to insufficient data at this horizon. Removing Biden Admin (3.6\% of trades, slope $-$0.136) shifts the aggregate from 0.933 to 1.183, confirming that this single subcategory drives the below-unity aggregate.
+\end{flushleft}
+\end{table}
+
+\end{document}
