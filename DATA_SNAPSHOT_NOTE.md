@@ -27,7 +27,7 @@ The revised snapshot was regenerated from the public Polymarket source using the
 released ingestion pipeline (`scripts/create_unified_polymarket.py`). It contains more
 resolved markets than the snapshot underlying the original submission — chiefly a
 larger tail of bespoke "Other" markets, plus additional Politics/Crypto markets that
-resolved between the two data pulls. We could **not** attribute the difference to a
+resolved between the two data pulls. The difference could **not** be attributed to a
 specific pipeline bug or a changed filter; it is consistent with a fuller/later pull of
 the same source rather than a correction of an error. The three analyzed domains
 (Sports, Crypto, Politics) are stable in trade and contract counts; the visible changes
